@@ -14,6 +14,9 @@
 #define SWITCH  9
 #define ENABLE A0
 
+#define SCANPERIOD 4000
+#define DEBOUNCE 10000
+
 struct digit {
   byte value;
   byte time;
@@ -72,8 +75,10 @@ tick()
   }
 }
 
-void
-updateswitch(state) {
+static void
+updateswitch(
+  byte  state)
+{
   if (state == HIGH) {
     on = HIGH;
     initdigits();
@@ -82,7 +87,7 @@ updateswitch(state) {
   }
 }
 
-void
+static void
 initdigits()
 {
   struct digit *  dp;
@@ -98,9 +103,11 @@ initdigits()
   }
 }
 
-void
+static void
 initcountdigits()
 {
+  struct digit *  dp;
+
   for (dp = digits; dp < digits + NDIGITS; ++dp) {
     dp->value = ((dp - digits) + offset) % 10;
   }
@@ -109,7 +116,7 @@ initcountdigits()
 void
 setup()
 {
-  Timer1.initialize(4000);
+  Timer1.initialize(SCANPERIOD);
   Timer1.attachInterrupt(tick);
   // PORTD (BCD outputs)
   pinMode( 0, OUTPUT);
@@ -146,6 +153,7 @@ loop()
 {
   int		  pair;
   int		  time;
+  byte            curswitch;
   boolean         done = false;
   unsigned long   now;
   struct digit *  dp;
