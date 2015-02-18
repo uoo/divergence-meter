@@ -5,23 +5,39 @@
 // PORTC a0,a1,a2,a3,a4,a5,rst
 // PORTD 0,1,2,3,4,5,6,7
 
+// even digits BCD 0,1,2,3
+// odd digits BCD 4,5,6,7
+// anodes 10, 11, 12, 13
+// switch 9
+
 #define NDIGITS 8
+#define SWITCH  9
+#define ENABLE A0
 
 struct digit {
   byte value;
   byte time;
 };
 
-static struct digit   digits[NDIGITS];
 static byte           pair;
 static byte           offset;
+static byte           on;
+static byte           lastswitch;
+static struct digit   digits[NDIGITS];
 static unsigned long  last;
+static unsigned long  lastswitchtime;
 
 static void
 tick()
 {
   byte            bits;
   struct digit *  dp;
+
+  digitalWrite(ENABLE, on);
+
+  if (on == LOW) {
+    return;
+  }
 
   //PORTB = 0x0f;
 
@@ -57,11 +73,45 @@ tick()
 }
 
 void
+updateswitch(state) {
+  if (state == HIGH) {
+    on = HIGH;
+    initdigits();
+  } else {
+    on = LOW;
+  }
+}
+
+void
+initdigits()
+{
+  struct digit *  dp;
+
+  for (dp = digits; dp < digits + NDIGITS; ++dp) {
+    if (dp == digits) {
+      dp->value = random(2);
+      dp->time = random(10);
+    } else {
+      dp->value = random(10);
+      dp->time = random(0x100);
+    }
+  }
+}
+
+void
+initcountdigits()
+{
+  for (dp = digits; dp < digits + NDIGITS; ++dp) {
+    dp->value = ((dp - digits) + offset) % 10;
+  }
+}
+
+void
 setup()
 {
   Timer1.initialize(4000);
   Timer1.attachInterrupt(tick);
-  // PORTD
+  // PORTD (BCD outputs)
   pinMode( 0, OUTPUT);
   pinMode( 1, OUTPUT);
   pinMode( 2, OUTPUT);
@@ -71,15 +121,24 @@ setup()
   pinMode( 6, OUTPUT);
   pinMode( 7, OUTPUT);
 
-  // PORTB
+  // PORTB (anodes)
   pinMode(10, OUTPUT);
   pinMode(11, OUTPUT);
   pinMode(12, OUTPUT);
   pinMode(13, OUTPUT);
 
-  pinMode(9, INPUT);
+  // switch
+  pinMode(SWITCH, INPUT);
+
+  // enable
+  pinMode(ENABLE, OUTPUT);
+
+  // initialize
   randomSeed(analogRead(A0));
-  pair = 0;
+  pair       = 0;
+  on         = HIGH;
+  lastswitch = LOW;
+  initdigits();
 }
 
 void
@@ -91,47 +150,30 @@ loop()
   unsigned long   now;
   struct digit *  dp;
 
-  //for (dp = digits; dp < digits + NDIGITS; ++dp) {
-  //  dp->value = ((dp - digits) + offset) % 10;
-  //}
-  
-  for (dp = digits; dp < digits + NDIGITS; ++dp) {
-    if (dp == digits) {
-      dp->value = random(2);
-      dp->time = random(10);
-    } else {
-      dp->value = random(10);
-      dp->time = random(0x100);
-    }
-  }
-  
   time = 0;
 
-  while (!done) {
-    done = true;
-    for (dp = digits; dp < digits + NDIGITS; ++dp) {
-      if (dp->time > time) {
-        dp->value = random(10);
-        done = false;
-      }
+  for (dp = digits; dp < digits + NDIGITS; ++dp) {
+    if (dp->time > time) {
+      dp->value = random(10);
     }
+  }
     
-    now = micros() / 10000;
+  now = micros() / 10000;
   
-    if (now > last) {
-      last = now;
-      ++time;
+  if (now > last) {
+    last = now;
+    ++time;
+  }
+  
+  if (lastswitchtime != 0) {
+    curswitch = digitalRead(SWITCH);
+    if (curswitch == lastswitch) {
+      if ((micros() - lastswitchtime) > DEBOUNCE) {
+        updateswitch(curswitch);
+      }
+    } else {
+      lastswitch = curswitch;
+      lastswitchtime = micros();
     }
-  }
-  
-  last = micros() / 2000000;
-  
-  while ((micros() / 2000000) != last) {
-  }
-
-  while (digitalRead(9)) {
   }
 }
-
-
-
